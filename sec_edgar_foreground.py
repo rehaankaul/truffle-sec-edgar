@@ -84,6 +84,7 @@ class EdgarForegroundApp(ForegroundApp):
     def __init__(self) -> None:
         super().__init__("sec-edgar", logger_name="sec-edgar.foreground")
         self._register_tools()
+        self._register_settings_tools()
         self._register_user_info()
 
     def _register_user_info(self) -> None:
@@ -105,6 +106,64 @@ class EdgarForegroundApp(ForegroundApp):
             else:
                 lines.append("Background watchlist: not configured.")
             return "\n".join(lines)
+
+    def _register_settings_tools(self) -> None:
+        @self.tool(_spec("edgar_get_settings"))
+        async def edgar_get_settings() -> CallToolResult:
+            watchlist = config.get_watchlist()
+            forms = config.get_watch_forms()
+            lines = [
+                "## SEC EDGAR settings",
+                f"- Watchlist ({len(watchlist)}): "
+                + (", ".join(watchlist) if watchlist else "not configured"),
+                f"- Watched forms: {', '.join(forms)}",
+                f"- SEC contact User-Agent: {config.get_user_agent()}",
+            ]
+            if config.app_vars_enabled():
+                lines.append(
+                    "- Watchlist and watched forms are editable here via "
+                    "edgar_set_watchlist / edgar_set_watched_forms."
+                )
+            else:
+                lines.append(
+                    "- Editing is unavailable outside a Truffle container; use "
+                    "`truffile deploy --replace`."
+                )
+            lines.append(
+                "- The SEC contact email is set at install; change it with "
+                "`truffile deploy --replace`."
+            )
+            return _text_result("\n".join(lines))
+
+        @self.tool(_spec("edgar_set_watchlist"))
+        async def edgar_set_watchlist(tickers: str) -> CallToolResult:
+            try:
+                saved = config.set_watchlist(tickers)
+            except ValueError as exc:
+                return _text_result(str(exc), is_error=True)
+            except Exception as exc:  # noqa: BLE001
+                return _text_result(
+                    f"Could not save watchlist: {exc}", is_error=True
+                )
+            return _text_result(
+                "Watchlist updated to: "
+                + ", ".join(saved)
+                + ". The background monitor will use it on its next cycle."
+            )
+
+        @self.tool(_spec("edgar_set_watched_forms"))
+        async def edgar_set_watched_forms(forms: str) -> CallToolResult:
+            try:
+                saved = config.set_watch_forms(forms)
+            except Exception as exc:  # noqa: BLE001
+                return _text_result(
+                    f"Could not save watched forms: {exc}", is_error=True
+                )
+            return _text_result(
+                "Watched forms updated to: "
+                + ", ".join(saved)
+                + ". The background monitor will use them on its next cycle."
+            )
 
     def _register_tools(self) -> None:
         @self.tool(_spec("edgar_search_company"))

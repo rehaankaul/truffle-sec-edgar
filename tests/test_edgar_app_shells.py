@@ -47,6 +47,36 @@ class TestForegroundShell(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result.success, msg=f"errors: {result.errors}")
 
 
+class TestSettingsTools(unittest.IsolatedAsyncioTestCase):
+    async def test_set_watchlist_via_mcp_persists_app_var(self) -> None:
+        import config
+        from sec_edgar_foreground import app as fg_app
+
+        store: dict[str, str] = {}
+        with patch.object(config, "app_vars_enabled", return_value=True), patch.object(
+            config, "set_app_var", side_effect=lambda k, v: store.__setitem__(k, v)
+        ), patch.object(config, "get_app_var", side_effect=lambda k: store.get(k)):
+            res = await call_tool(
+                fg_app._mcp, "edgar_set_watchlist", {"tickers": "AAPL, NVDA"}
+            )
+            self.assertFalse(getattr(res, "isError", False))
+            self.assertEqual(store.get(config.APP_VAR_WATCHLIST), "AAPL,NVDA")
+
+            shown = await call_tool(fg_app._mcp, "edgar_get_settings", {})
+            self.assertIn("AAPL, NVDA", shown.content[0].text)
+
+    async def test_set_watchlist_reports_error_when_unavailable(self) -> None:
+        import config
+        from sec_edgar_foreground import app as fg_app
+
+        with patch.object(config, "app_vars_enabled", return_value=False):
+            res = await call_tool(
+                fg_app._mcp, "edgar_set_watchlist", {"tickers": "AAPL"}
+            )
+        self.assertTrue(res.isError)
+        self.assertIn("truffile deploy --replace", res.content[0].text)
+
+
 class TestBackgroundShell(unittest.IsolatedAsyncioTestCase):
     async def test_background_cycle_submits_new_filings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

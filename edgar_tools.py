@@ -21,6 +21,8 @@ class ToolDefinition:
 
 
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False}
+# Settings writers change app config but are not destructive (no data loss).
+_WRITE = {"readOnlyHint": False, "destructiveHint": False}
 
 
 TOOLS = [
@@ -236,4 +238,54 @@ TOOLS = [
     ),
 ]
 
-TOOLS_BY_NAME = {tool.name: tool for tool in TOOLS}
+
+# Settings tools — let the user view and change the background monitor's
+# watchlist and watched forms from chat, without redeploying.
+SETTINGS_TOOLS = [
+    ToolDefinition(
+        name="edgar_get_settings",
+        title="Get EDGAR Settings",
+        description=(
+            "Show the current SEC EDGAR app settings: the background-monitor "
+            "watchlist, the watched form types, and the SEC contact User-Agent. "
+            "Use before changing settings so you know the current values.\n"
+            "No parameters. Example: edgar_get_settings()"
+        ),
+        icon="gear",
+        annotations=_READ_ONLY,
+    ),
+    ToolDefinition(
+        name="edgar_set_watchlist",
+        title="Set Watchlist",
+        description=(
+            "Replace the background monitor's watchlist with a new set of tickers "
+            "(takes effect on the next background cycle). This sets the FULL list, "
+            "so to add or remove one, call edgar_get_settings first and pass the "
+            "complete updated list.\n"
+            "Parameters:\n"
+            "- tickers (required): comma-separated tickers, e.g. 'AAPL, MSFT, NVDA'.\n"
+            "Example: edgar_set_watchlist(tickers=\"AAPL, MSFT, NVDA\")"
+        ),
+        icon="bookmarks",
+        annotations=_WRITE,
+    ),
+    ToolDefinition(
+        name="edgar_set_watched_forms",
+        title="Set Watched Forms",
+        description=(
+            "Replace the SEC form types the background monitor treats as "
+            "noteworthy (takes effect on the next background cycle). Sets the FULL "
+            "list.\n"
+            "Parameters:\n"
+            "- forms (required): comma-separated SEC form types, e.g. "
+            "'8-K, 10-K, 10-Q'. Add 'S-1' for IPO registrations or '4' for "
+            "insider transactions.\n"
+            "Example: edgar_set_watched_forms(forms=\"8-K, 10-K, 10-Q, S-1\")"
+        ),
+        icon="funnel",
+        annotations=_WRITE,
+    ),
+]
+
+ALL_TOOLS = TOOLS + SETTINGS_TOOLS
+TOOLS_BY_NAME = {tool.name: tool for tool in ALL_TOOLS}

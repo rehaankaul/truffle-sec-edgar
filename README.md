@@ -33,6 +33,10 @@ All data comes from the SEC's free, public APIs. **No API key required.**
 | `edgar_raw_query` | Generic passthrough to any SEC EDGAR API endpoint |
 | `edgar_full_text_search` | Advanced full-text search with ticker/CIK filtering, pagination, and snippets |
 
+Plus three **settings tools** the agent uses to reconfigure the background
+monitor from chat: `edgar_get_settings`, `edgar_set_watchlist`, and
+`edgar_set_watched_forms`.
+
 **Background monitor:** on a schedule (every 2 minutes in dev, 30 minutes in
 production) it checks your watchlist of tickers and submits a note to the
 proactivity agent when a new filing (of the configured form types) appears — so
@@ -88,10 +92,21 @@ watchlist only drives proactive background alerts.
 
 ### Changing settings later
 
-Because each setting is its own configuration step, you can change just one
-(say, the watchlist) without re-entering the others. Reconfigure/reset the app
-from the Symphony desktop client and each field appears as its own screen, or
-re-run setup from the CLI:
+**Watchlist and watched forms — just ask the agent (no redeploy):** these are
+stored as runtime app variables, so you can change them right from chat. The
+background monitor picks up the change on its next cycle.
+
+```bash
+truffile chat --app sec-edgar "show my EDGAR settings"
+truffile chat --app sec-edgar "set my EDGAR watchlist to AAPL, NVDA, MSFT"
+truffile chat --app sec-edgar "also watch S-1 filings"
+```
+
+Backing tools: `edgar_get_settings`, `edgar_set_watchlist`, `edgar_set_watched_forms`.
+
+**SEC contact email** is set at install time. To change it (or to re-enter
+everything from scratch), re-run setup from the CLI — it re-prompts each of the
+three configuration screens:
 
 ```bash
 truffile deploy . --replace

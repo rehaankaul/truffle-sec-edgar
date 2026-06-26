@@ -122,6 +122,51 @@ class TestBackgroundWorker(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(ok)
 
 
+class TestSettings(unittest.TestCase):
+    def test_parse_watchlist_dedupes_and_uppercases(self) -> None:
+        self.assertEqual(config.parse_watchlist("aapl, MSFT, aapl\nnvda"), ["AAPL", "MSFT", "NVDA"])
+
+    def test_get_watchlist_prefers_app_var_over_env(self) -> None:
+        with patch.dict("os.environ", {"SEC_EDGAR_WATCHLIST": "AAPL"}, clear=False), patch.object(
+            config, "get_app_var", return_value="NVDA, AMD"
+        ):
+            self.assertEqual(config.get_watchlist(), ["NVDA", "AMD"])
+
+    def test_get_watchlist_falls_back_to_env_when_app_var_empty(self) -> None:
+        with patch.dict("os.environ", {"SEC_EDGAR_WATCHLIST": "AAPL, MSFT"}, clear=False), patch.object(
+            config, "get_app_var", return_value=None
+        ):
+            self.assertEqual(config.get_watchlist(), ["AAPL", "MSFT"])
+
+    def test_set_watchlist_persists_cleaned_list(self) -> None:
+        saved: dict[str, str] = {}
+        with patch.object(config, "app_vars_enabled", return_value=True), patch.object(
+            config, "set_app_var", side_effect=lambda k, v: saved.__setitem__(k, v)
+        ):
+            result = config.set_watchlist("aapl, nvda , aapl")
+        self.assertEqual(result, ["AAPL", "NVDA"])
+        self.assertEqual(saved, {config.APP_VAR_WATCHLIST: "AAPL,NVDA"})
+
+    def test_set_watchlist_rejects_empty(self) -> None:
+        with patch.object(config, "app_vars_enabled", return_value=True):
+            with self.assertRaises(ValueError):
+                config.set_watchlist("   ,  ")
+
+    def test_set_watch_forms_persists_uppercased(self) -> None:
+        saved: dict[str, str] = {}
+        with patch.object(config, "app_vars_enabled", return_value=True), patch.object(
+            config, "set_app_var", side_effect=lambda k, v: saved.__setitem__(k, v)
+        ):
+            result = config.set_watch_forms("8-k, s-1")
+        self.assertEqual(result, ["8-K", "S-1"])
+        self.assertEqual(saved, {config.APP_VAR_WATCH_FORMS: "8-K,S-1"})
+
+    def test_set_app_var_raises_outside_container(self) -> None:
+        with patch.object(config, "app_vars_enabled", return_value=False):
+            with self.assertRaises(RuntimeError):
+                config.set_app_var("watchlist", "AAPL")
+
+
 class TestContextFormatting(unittest.TestCase):
     def test_build_context_includes_actionable_hints(self) -> None:
         with patch.dict("os.environ", {"SEC_EDGAR_WATCHLIST": "AAPL"}, clear=False):
