@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from truffile.app_runtime import AppHarness
+from truffile.app_runtime import AppHarness, call_tool
 
 import edgar_engine as eng
 
@@ -22,6 +22,21 @@ class TestForegroundShell(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(result.success, msg=f"errors: {result.errors}")
         self.assertEqual(result.errors, [])
+
+    async def test_mcp_serving_path_accepts_text_output(self) -> None:
+        # Regression guard: the real FastMCP serving path (what the agent hits)
+        # validates tool OUTPUT. Our tools return free-form text (CallToolResult
+        # with no structuredContent), so the tools must set structured_output=
+        # False or FastMCP rejects every call with an output ValidationError.
+        # The AppHarness handler-path above does NOT exercise this.
+        from sec_edgar_foreground import app as fg_app
+
+        markdown = "## SEC EDGAR Company Search\n- Apple Inc. (AAPL) — CIK 320193"
+        with patch.object(eng, "edgar_search_company", new=AsyncMock(return_value=markdown)):
+            res = await call_tool(fg_app._mcp, "edgar_search_company", {"query": "Apple"})
+
+        self.assertFalse(getattr(res, "isError", False))
+        self.assertIn("Apple", res.content[0].text)
 
     async def test_extract_xbrl_requires_cik_or_url(self) -> None:
         from sec_edgar_foreground import app as fg_app

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import sys
 from typing import Any
 
@@ -59,15 +60,24 @@ def _coerce_format(response_format: str | None) -> ResponseFormat | None:
         return ResponseFormat.MARKDOWN
 
 
+# These tools return free-form text (CallToolResult), not a structured object.
+# Disable FastMCP's auto-generated structured-output model so it doesn't try to
+# validate result.structuredContent (which is None) and reject every call.
+_TOOLSPEC_PARAMS = set(inspect.signature(ToolSpec).parameters)
+
+
 def _spec(name: str) -> ToolSpec:
     tool = TOOLS_BY_NAME[name]
-    return ToolSpec(
-        name=tool.name,
-        title=tool.title,
-        description=tool.description,
-        icon=tool.icon,
-        annotations=dict(tool.annotations),
-    )
+    kwargs: dict[str, Any] = {
+        "name": tool.name,
+        "title": tool.title,
+        "description": tool.description,
+        "icon": tool.icon,
+        "annotations": dict(tool.annotations),
+    }
+    if "structured_output" in _TOOLSPEC_PARAMS:
+        kwargs["structured_output"] = False
+    return ToolSpec(**kwargs)
 
 
 class EdgarForegroundApp(ForegroundApp):
