@@ -78,6 +78,17 @@ def verify() -> int:
     return 0 if ok else 1
 
 
+def verify_forms() -> int:
+    import config
+
+    forms = config.get_watch_forms()
+    if not forms:
+        print("No form types configured.", flush=True)
+        return 1
+    print(f"Watching form types: {', '.join(forms)}", flush=True)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="SEC EDGAR background app")
     parser.add_argument(
@@ -85,7 +96,14 @@ def main() -> int:
         action="store_true",
         help="Verify the background watchlist configuration, then exit.",
     )
+    parser.add_argument(
+        "--verify-forms",
+        action="store_true",
+        help="Verify the watched form types parse, then exit.",
+    )
     args = parser.parse_args()
+    if args.verify_forms:
+        return verify_forms()
     if args.verify:
         return verify()
     app.main()

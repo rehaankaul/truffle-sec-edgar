@@ -71,19 +71,27 @@ truffile validate .          # optional: local checks, no device needed
 truffile deploy .
 ```
 
-During install you'll be asked for:
+Install presents three separate configuration steps, so each can be edited on
+its own later:
 
-1. **SEC contact User-Agent** *(required)* — the SEC requires every API client to
+1. **SEC contact email** *(required)* — the SEC requires every API client to
    identify itself with a name and contact email, e.g. `Jane Doe jane@example.com`.
    No parentheses or browser-style formatting (the SEC rejects those).
-2. **Watchlist** *(required)* — comma-separated tickers to monitor for new
+2. **Watchlist tickers** *(required)* — comma-separated tickers to monitor for new
    filings, e.g. `AAPL, MSFT, TSLA`.
-3. **Watched form types** *(optional)* — defaults to `8-K, 10-K, 10-Q`.
+3. **Watched documents** *(optional)* — comma-separated SEC form types; defaults
+   to `8-K, 10-K, 10-Q`. Add e.g. `S-1` for IPO registrations or `4` for
+   insider-transaction reports.
 
 The 12 tools work for **any** public company regardless of the watchlist — the
 watchlist only drives proactive background alerts.
 
-To update an already-installed copy after pulling changes:
+### Changing settings later
+
+Because each setting is its own configuration step, you can change just one
+(say, the watchlist) without re-entering the others. Reconfigure/reset the app
+from the Symphony desktop client and each field appears as its own screen, or
+re-run setup from the CLI:
 
 ```bash
 truffile deploy . --replace

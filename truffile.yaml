@@ -60,39 +60,74 @@ steps:
       - source: ./sec_edgar_background.py
         destination: ./sec_edgar_background.py
 
-  - name: Configure SEC access and watchlist
+  # Each setting below is its own configuration step so it can be edited on its
+  # own from the Symphony reconfigure flow without touching the others.
+
+  - name: SEC contact email
     type: text
     update_policy: run_on_update
     update_check: python ./sec_edgar_foreground.py --verify
     ui_state_on_show: user_interaction_ready
-    ui_state_on_complete: move_to_background
     content: |
-      Set up SEC EDGAR access.
+      SEC contact User-Agent (required).
 
-      1) SEC contact User-Agent (required). The SEC requires every API client to
-         identify itself with a name and contact email, e.g.
-         "Jane Doe jane@example.com". Do not use parentheses or browser-style
-         formatting — the SEC rejects those.
-
-      2) Watchlist (required). Comma-separated tickers the background monitor
-         should watch for new filings, e.g. "AAPL, MSFT, TSLA".
-
-      3) Watched forms (optional). Comma-separated SEC form types that count as
-         noteworthy. Defaults to 8-K, 10-K, 10-Q.
-
-      The agent's 12 EDGAR tools work for any public company regardless of the
-      watchlist — the watchlist only drives proactive background alerts.
+      The SEC requires every API client to identify itself with a name and
+      contact email, e.g. "Jane Doe jane@example.com". Do not use parentheses or
+      browser-style formatting — the SEC rejects those. Use a real address so the
+      SEC can reach you if needed.
     fields:
       - name: sec_user_agent
         label: SEC Contact User-Agent (name + email)
         type: text
         placeholder: Jane Doe jane@example.com
         env: SEC_EDGAR_USER_AGENT
+    validator:
+      type: bash
+      run: python ./sec_edgar_foreground.py --verify
+      timeout: 120
+      error_message: |
+        Could not verify your SEC User-Agent. Use the form "Name email@example.com"
+        (no parentheses) and confirm the device can reach sec.gov.
+
+  - name: Watchlist tickers
+    type: text
+    update_policy: run_on_update
+    update_check: python ./sec_edgar_background.py --verify
+    ui_state_on_show: user_interaction_ready
+    content: |
+      Watchlist (required).
+
+      Comma-separated tickers the background monitor watches for new filings,
+      e.g. "AAPL, MSFT, TSLA". The 12 EDGAR tools still work for any public
+      company regardless of the watchlist — this only drives proactive background
+      alerts. Edit this any time to change which companies are monitored.
+    fields:
       - name: watchlist
         label: Watchlist tickers (comma-separated)
         type: text
         placeholder: AAPL, MSFT, TSLA
         env: SEC_EDGAR_WATCHLIST
+    validator:
+      type: bash
+      run: python ./sec_edgar_background.py --verify
+      timeout: 60
+      error_message: |
+        Enter at least one ticker (comma-separated), e.g. AAPL, MSFT, TSLA.
+
+  - name: Watched documents
+    type: text
+    update_policy: run_on_update
+    update_check: python ./sec_edgar_background.py --verify-forms
+    ui_state_on_show: user_interaction_ready
+    ui_state_on_complete: move_to_background
+    content: |
+      Watched form types (optional).
+
+      Comma-separated SEC form types that count as noteworthy for background
+      alerts, e.g. "8-K, 10-K, 10-Q". Leave blank to use the default
+      (8-K, 10-K, 10-Q). Examples: add "S-1" to catch IPO registrations, or
+      "4" to catch insider-transaction reports.
+    fields:
       - name: watch_forms
         label: Watched form types (optional)
         type: text
@@ -102,14 +137,11 @@ steps:
         env_default_if_empty: "8-K,10-K,10-Q"
     validator:
       type: bash
-      run: |
-        python ./sec_edgar_foreground.py --verify
-        python ./sec_edgar_background.py --verify
-      timeout: 120
+      run: python ./sec_edgar_background.py --verify-forms
+      timeout: 30
       error_message: |
-        Could not verify setup. Confirm your SEC User-Agent is "Name email@example.com"
-        (no parentheses), that the device can reach sec.gov, and that the watchlist
-        contains at least one ticker.
+        Could not parse form types. Use comma-separated SEC forms, e.g.
+        8-K, 10-K, 10-Q.
 
   - name: Finalize installation
     type: bash
