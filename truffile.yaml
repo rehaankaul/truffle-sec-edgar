@@ -1,0 +1,119 @@
+truffile_version: 2
+metadata:
+  name: SEC EDGAR
+  bundle_id: org.truffle.sec.edgar
+  description: |
+    Give Truffle direct access to SEC EDGAR financial data: look up any public US
+    company, pull filing history, extract XBRL financial statements and segment
+    detail for modeling, compare metrics across companies, and run full-text
+    search across all filings. A background monitor watches a watchlist of tickers
+    and surfaces newly filed 8-Ks, 10-Ks, and 10-Qs. All data is free and public;
+    no API key is required.
+  icon_file: ./icon.png
+  foreground:
+    process:
+      cmd:
+        - python
+        - sec_edgar_foreground.py
+      working_directory: /
+      environment:
+        PYTHONUNBUFFERED: "1"
+  background:
+    process:
+      cmd:
+        - python
+        - sec_edgar_background.py
+      working_directory: /
+      environment:
+        PYTHONUNBUFFERED: "1"
+    default_schedule:
+      type: interval
+      interval:
+        duration: 30m
+        prod_duration: 30m
+        daily_window: "00:00-23:59"
+
+steps:
+  - name: Install Python dependencies
+    type: bash
+    update_policy: run_on_update
+    run: |
+      pip install --no-cache-dir \
+        "mcp>=1.2.0" \
+        "httpx>=0.27.0" \
+        "pydantic>=2.0.0"
+
+  - name: Copy application files
+    type: files
+    update_policy: run_on_update
+    files:
+      - source: ./edgar_engine.py
+        destination: ./edgar_engine.py
+      - source: ./edgar_tools.py
+        destination: ./edgar_tools.py
+      - source: ./config.py
+        destination: ./config.py
+      - source: ./bg_worker.py
+        destination: ./bg_worker.py
+      - source: ./sec_edgar_foreground.py
+        destination: ./sec_edgar_foreground.py
+      - source: ./sec_edgar_background.py
+        destination: ./sec_edgar_background.py
+
+  - name: Configure SEC access and watchlist
+    type: text
+    update_policy: run_on_update
+    update_check: python ./sec_edgar_foreground.py --verify
+    ui_state_on_show: user_interaction_ready
+    ui_state_on_complete: move_to_background
+    content: |
+      Set up SEC EDGAR access.
+
+      1) SEC contact User-Agent (required). The SEC requires every API client to
+         identify itself with a name and contact email, e.g.
+         "Jane Doe jane@example.com". Do not use parentheses or browser-style
+         formatting — the SEC rejects those.
+
+      2) Watchlist (required). Comma-separated tickers the background monitor
+         should watch for new filings, e.g. "AAPL, MSFT, TSLA".
+
+      3) Watched forms (optional). Comma-separated SEC form types that count as
+         noteworthy. Defaults to 8-K, 10-K, 10-Q.
+
+      The agent's 12 EDGAR tools work for any public company regardless of the
+      watchlist — the watchlist only drives proactive background alerts.
+    fields:
+      - name: sec_user_agent
+        label: SEC Contact User-Agent (name + email)
+        type: text
+        placeholder: Jane Doe jane@example.com
+        env: SEC_EDGAR_USER_AGENT
+      - name: watchlist
+        label: Watchlist tickers (comma-separated)
+        type: text
+        placeholder: AAPL, MSFT, TSLA
+        env: SEC_EDGAR_WATCHLIST
+      - name: watch_forms
+        label: Watched form types (optional)
+        type: text
+        default: ""
+        placeholder: 8-K, 10-K, 10-Q
+        env: SEC_EDGAR_WATCH_FORMS
+        env_default_if_empty: "8-K,10-K,10-Q"
+    validator:
+      type: bash
+      run: |
+        python ./sec_edgar_foreground.py --verify
+        python ./sec_edgar_background.py --verify
+      timeout: 120
+      error_message: |
+        Could not verify setup. Confirm your SEC User-Agent is "Name email@example.com"
+        (no parentheses), that the device can reach sec.gov, and that the watchlist
+        contains at least one ticker.
+
+  - name: Finalize installation
+    type: bash
+    update_policy: run_on_update
+    run: |
+      mkdir -p /root/.sec-edgar-truffle
+      echo "SEC EDGAR app install complete."
