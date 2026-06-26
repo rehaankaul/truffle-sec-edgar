@@ -66,7 +66,7 @@ class TestBackgroundWorker(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self._env.stop)
         return EdgarBackgroundWorker()
 
-    async def test_first_cycle_seeds_without_submitting(self) -> None:
+    async def test_first_cycle_seeds_and_confirms_without_reporting_filings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             state_path = f"{tmp}/state.json"
             worker = self._make_worker(state_path)
@@ -75,10 +75,14 @@ class TestBackgroundWorker(unittest.IsolatedAsyncioTestCase):
                 eng, "sec_request", new=AsyncMock(return_value=subs)
             ):
                 result = await worker.run_cycle()
-            # Seeding cycle: nothing submitted, but state records the accession.
-            self.assertIsNone(result.content)
+            # Seeding cycle: no historical filings reported, but a one-time
+            # low-priority "monitoring active" confirmation is sent.
             self.assertTrue(result.stats["baseline_seeded"])
             self.assertEqual(result.stats["new_filings"], 0)
+            self.assertIsNotNone(result.content)
+            self.assertEqual(result.priority, 1)  # PRIORITY_LOW
+            self.assertIn("monitoring is now active", result.content.lower())
+            self.assertIn("AAPL", result.content)
 
     async def test_second_cycle_detects_new_filing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -102,6 +106,7 @@ class TestBackgroundWorker(unittest.IsolatedAsyncioTestCase):
 
             self.assertIsNotNone(result.content)
             self.assertEqual(result.stats["new_filings"], 1)
+            self.assertEqual(result.priority, 3)  # PRIORITY_HIGH
             self.assertIn("AAPL", result.content)
             self.assertIn("0000320193-24-000099".replace("-", ""), "".join(result.uris))
 

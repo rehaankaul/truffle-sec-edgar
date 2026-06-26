@@ -33,9 +33,12 @@ All data comes from the SEC's free, public APIs. **No API key required.**
 | `edgar_raw_query` | Generic passthrough to any SEC EDGAR API endpoint |
 | `edgar_full_text_search` | Advanced full-text search with ticker/CIK filtering, pagination, and snippets |
 
-**Background monitor:** every 30 minutes it checks your watchlist of tickers and
-submits a note to the proactivity agent when a new filing (of the configured form
-types) appears — so you hear about a fresh 8-K or 10-K without asking.
+**Background monitor:** on a schedule (every 2 minutes in dev, 30 minutes in
+production) it checks your watchlist of tickers and submits a note to the
+proactivity agent when a new filing (of the configured form types) appears — so
+you hear about a fresh 8-K or 10-K without asking. The very first cycle after
+install seeds its baseline (so you aren't flooded with historical filings) and
+sends a one-time low-priority "monitoring is now active" confirmation.
 
 ---
 

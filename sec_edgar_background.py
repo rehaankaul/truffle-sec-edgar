@@ -35,11 +35,6 @@ def _run_coro(coro: Coroutine[Any, Any, Any]) -> Any:
     with ThreadPoolExecutor(max_workers=1) as executor:
         return executor.submit(asyncio.run, coro).result()
 
-# Newly filed 8-Ks/10-Ks are time-sensitive; submit at default priority and let
-# the proactivity agent curate.
-_PRIORITY_DEFAULT = 3
-
-
 class EdgarBackgroundApp(BackgroundWorkerApp[EdgarBackgroundWorker, BgRunResult]):
     def __init__(self) -> None:
         super().__init__("sec-edgar", logger_name="sec-edgar.background")
@@ -69,7 +64,7 @@ class EdgarBackgroundApp(BackgroundWorkerApp[EdgarBackgroundWorker, BgRunResult]
             ctx,
             content=result.content,
             uris=result.uris,
-            priority=_PRIORITY_DEFAULT,
+            priority=result.priority,
         )
 
 

@@ -37,11 +37,18 @@ class NewFiling:
     url: str
 
 
+# Priority values from the runtime's BackgroundContext proto (kept as plain ints
+# so this module imports without the device-only proto package): LOW=1, HIGH=3.
+PRIORITY_LOW = 1
+PRIORITY_HIGH = 3
+
+
 @dataclass
 class BgRunResult:
     content: str | None = None
     uris: list[str] = field(default_factory=list)
     error: str | None = None
+    priority: int = PRIORITY_HIGH
     stats: dict[str, Any] = field(default_factory=dict)
 
 
@@ -69,6 +76,35 @@ class EdgarBackgroundWorker:
 
     # --------------------------------------------------------------- run cycle
     async def run_cycle(self) -> BgRunResult:
+        # The runtime's background scheduler is a *synchronous* loop that drives
+        # each cycle via a fresh asyncio.run(), so every cycle gets a new event
+        # loop. edgar_engine caches a module-global httpx client bound to the
+        # loop that created it; if we reused it, every cycle after the first
+        # would fail with "Event loop is closed". Drop any stale client up front
+        # and close the one we create here, so the client is always bound to the
+        # current cycle's loop.
+        self._reset_engine_client()
+        try:
+            return await self._collect()
+        finally:
+            await self._close_engine_client()
+
+    @staticmethod
+    def _reset_engine_client() -> None:
+        # Force edgar_engine.get_client() to build a fresh client in this loop.
+        eng._client = None
+
+    @staticmethod
+    async def _close_engine_client() -> None:
+        client = eng._client
+        eng._client = None
+        if client is not None and not client.is_closed:
+            try:
+                await client.aclose()
+            except Exception:  # noqa: BLE001
+                pass
+
+    async def _collect(self) -> BgRunResult:
         if not self._watchlist:
             return BgRunResult(error="no_watchlist")
 
@@ -120,14 +156,40 @@ class EdgarBackgroundWorker:
             "new_filings": len(new_filings),
         }
 
+        # First cycle: seed state and send a one-time, low-priority confirmation
+        # so the user can see the monitor is active without waiting for a brand
+        # new filing to be published.
+        if not seeded:
+            return BgRunResult(
+                content=self._seed_confirmation(unresolved),
+                priority=PRIORITY_LOW,
+                stats=stats,
+            )
+
         if not new_filings:
             return BgRunResult(content=None, stats=stats)
 
         return BgRunResult(
             content=self._build_context(new_filings),
             uris=[f.url for f in new_filings if f.url],
+            priority=PRIORITY_HIGH,
             stats=stats,
         )
+
+    def _seed_confirmation(self, unresolved: list[str]) -> str:
+        watched = ", ".join(self._watchlist)
+        forms = ", ".join(sorted(self._forms))
+        lines = [
+            f"SEC EDGAR monitoring is now active for {len(self._watchlist)} "
+            f"ticker(s): {watched}.",
+            f"I'll surface newly filed {forms} documents as they're published.",
+        ]
+        if unresolved:
+            lines.append(
+                "Note: these tickers could not be resolved to a SEC CIK and are "
+                f"not being watched: {', '.join(unresolved)}."
+            )
+        return "\n".join(lines)
 
     # ---------------------------------------------------------------- helpers
     async def _recent_filings(self, ticker: str, entry: dict[str, Any]) -> list[NewFiling]:

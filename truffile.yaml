@@ -29,7 +29,7 @@ metadata:
     default_schedule:
       type: interval
       interval:
-        duration: 30m
+        duration: 2m
         prod_duration: 30m
         daily_window: "00:00-23:59"
 
